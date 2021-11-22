@@ -55,7 +55,7 @@ func (cfg *System) build(ctx context.Context, system string) error {
 	}
 	inform(ctx, `building %q`, system)
 	link := filepath.Join(tmp, `system-`+system)
-	args := []string{`build`}
+	args := make([]string, 0, 64)
 	args = append(args, inv.Nix.Build.Flags...)
 	args = append(args, `--out-link`, link, `--include`, `deployment=`+deploymentPath)
 	paths := inv.systemPaths(system)
@@ -63,8 +63,8 @@ func (cfg *System) build(ctx context.Context, system string) error {
 		args = append(args, `--include`, path)
 	}
 	args = append(args, `--argstr`, `name`, system)
-	args = append(args, `(import <hive/build.nix>)`)
-	_, err := execNix(ctx, args...)
+	args = append(args, `--expr`, `(import <hive/build.nix>)`)
+	_, err := eval(ctx, `nix-build`, args...)
 	if err != nil {
 		return err
 	}

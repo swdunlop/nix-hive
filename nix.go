@@ -8,8 +8,12 @@ import (
 )
 
 func execNix(ctx context.Context, args ...string) ([]byte, error) {
-	inform(ctx, `running nix %v`, strings.Join(args, " "))
-	cmd := exec.CommandContext(ctx, `nix`, args...)
+	return eval(ctx, `nix`, args...)
+}
+
+func eval(ctx context.Context, bin string, args ...string) ([]byte, error) {
+	inform(ctx, `running %v %v`, bin, strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Stderr = os.Stderr
 	data, err := cmd.Output()
 	if err != nil {

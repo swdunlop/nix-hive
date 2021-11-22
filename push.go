@@ -104,7 +104,11 @@ func (inv *Inventory) push(ctx context.Context, instances []string, paths ...str
 func (inv *Inventory) pushNixPaths(ctx context.Context, store string, paths ...string) error {
 	paths = uniqueStrings(paths)
 	args := make([]string, 0, len(paths)+8)
-	args = append(args, `copy`, `--to`, store, `--substitute-on-destination`)
+	args = append(
+		args, `copy`,
+		`--extra-experimental-features`, `nix-command`,
+		`--to`, store, `--substitute-on-destination`,
+	)
 	opts := os.Getenv("NIX_COPYOPTS") //TODO: DOC this and NIX_SSHOPTS
 	if opts != `` {
 		args = append(args, strings.Split(opts, " ")...)

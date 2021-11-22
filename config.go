@@ -22,12 +22,13 @@ func init() {
 		&no, `no`, ``, `List of steps to skip if previously complete, separated by ","`)
 }
 
-// loadInventory evaluates <hive/inventory.nix> to establish inventory.
+// loadInventory evaluates <hive/config.nix> to establish inventory.
 func loadInventory(cmd *cobra.Command, args []string) error {
-	data, err := execNix(
-		cmd.Context(), `eval`, `--json`,
+	data, err := eval(cmd.Context(), `nix-instantiate`,
+		`--eval`, `--json`, `--strict`,
 		`--include`, `deployment=`+deploymentPath,
-		`(import <hive/config.nix>)`)
+		`--expr`, `(import <hive/config.nix>)`,
+	)
 	if err != nil {
 		return err
 	}
