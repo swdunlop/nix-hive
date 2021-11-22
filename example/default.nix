@@ -8,22 +8,33 @@
     sha256 = "1xjssjlcxxkbyyigy2dvyslk37rp0b5by1q1m1c438g0yypgcpbs";
   };
 
+  # You can also add temporary settings for the nix build using:
+  # nix.build.flags = [ "--builders" "ssh-ng://nixos-x86_64.vm x86_64-linux" "--builders-use-substitutes" ];
+
   # Each system configuration is placed in the system attribute for the deployment.  Unlike other Nix deployment tools,
   # Nix-Hive organizes the system configurations in a distinct section from the instances -- this makes building
   # much faster, since Nix-Hive only needs to build the configuration once per system, and not once per instance.
-  systems.www.configuration = { pkgs, ... }: {
-    imports = [ ./instance.nix ];
-    services.caddy = {
-      enable = true;
-      config = ''
-        example.com {
-          file_server /www
-        }
-      '';
+  systems.www = {
+    configuration = { pkgs, ... }: {
+      imports = [ ./instance.nix ];
+      services.caddy = {
+        enable = true;
+        config = ''
+          example.com {
+            file_server /www
+          }
+        '';
+      };
     };
-  };
 
-  systems.portico.configuration = import ./instance.nix;
+    # Nix Hive defaults to building systems identical to the host doing the build.  You can override this using the
+    # system attribute.
+    system = "x86_64-linux";
+  };
+  systems.portico = {
+    configuration = import ./instance.nix;
+    system = "x86_64-linux";
+  };
 
   instances = let
     # internal simplifies describing an internal instance that is not allowed egress or direct contact via ssh.

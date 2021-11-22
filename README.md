@@ -85,8 +85,8 @@ generates a file identifying the instances and their associated systems, and imp
 
 ## Remote Build
 
-Nix-Hive currently does not support using a build host to build its systems.  A pull request adding this would be very
-welcome, but it is not something we needed for our own use.
+You can enable using remote builders or use other features of `nix build` by adding an array of flags to 
+`nix.build.flags` in your `hive.nix`.
 
 ## Running Tasks
 

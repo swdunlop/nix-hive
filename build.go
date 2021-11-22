@@ -55,7 +55,9 @@ func (cfg *System) build(ctx context.Context, system string) error {
 	}
 	inform(ctx, `building %q`, system)
 	link := filepath.Join(tmp, `system-`+system)
-	args := []string{`build`, `--out-link`, link, `--include`, `deployment=` + deploymentPath}
+	args := []string{`build`}
+	args = append(args, inv.Nix.Build.Flags...)
+	args = append(args, `--out-link`, link, `--include`, `deployment=`+deploymentPath)
 	paths := inv.systemPaths(system)
 	for _, path := range paths {
 		args = append(args, `--include`, path)

@@ -121,6 +121,12 @@ type Inventory struct {
 
 	// Instances maps instance information by instance name.
 	Instances map[string]*Instance `json:"instances"`
+
+	Nix struct {
+		Build struct {
+			Flags []string `json:"flags,omitempty"`
+		} `json:"build,omitempty"`
+	} `json:"nix,omitempty"`
 }
 
 // instanceSystems identifies unique systems associated with instances in the provided patterns, in pattern order.

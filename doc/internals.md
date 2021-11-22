@@ -8,6 +8,8 @@ instances.  We refer to this output as the system inventory, and it is evaluated
   always include `<deployment>`, which will be the path to the deployment.
 - `systems.${name}.path` -- A list of paths suitable for use with `--include` when building the system.  These paths 
   will override those in the top level `paths`.
+- `systems.${name}.nix` -- A list of Nix configuration settings, see [nix.conf](https://nixos.org/manual/nix/stable/command-ref/conf-file.html).  These are passed to `nix build` when building the settings.
+- `systems.${name}.system` -- The target system, which defaults to `builtins.currentSystem`
 - `instances.${name}.store` -- the instance store that must receive a copy of the system configuration prior to trying
   to transfer it to `${name}`.
 - `sshConfig` -- An `ssh_config` (see `man ssh_config`) that contains all of the `instances.${name}.ssh` options.  This

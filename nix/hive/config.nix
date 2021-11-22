@@ -7,13 +7,14 @@ let
   explode = attrs: map (name: "${name}=${getAttr name attrs}") (attrNames attrs);
   explodePaths = attrs: explode (attrs.paths or { });
 
-  enumerateSystem = name: system: { 
-    paths = explodePaths system; 
-  };
+  enumerateSystem = name: system: { paths = explodePaths system; };
 
   # We enumerate all of the systems and their paths.  This serves two functions -- we know which systems need to be
   # built, and we know what paths they have that would override those of the system.
   systems = mapAttrs enumerateSystem (deployment.systems or { });
+
+  # We expose the top level nix settings verbatim
+  nix = deployment.nix or { };
 
   # checkSystem checks that a system is a string and identifies a system in systems.
   checkSystem = system:
@@ -56,4 +57,4 @@ let
 
   instanceNames = attrNames instances;
   ssh = concatStringsSep "" (map sshHostConfig instanceNames);
-in { inherit instances paths ssh systems; }
+in { inherit nix instances paths ssh systems; }
