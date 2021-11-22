@@ -20,7 +20,7 @@ are a number of similar tools out there, but they all lacked one or more of the 
 Nix-Hive depends on Nix to build systems and transfer them, and therefore can be installed using Nix:
 
 ```sh
-nix-env -if https://github.com/threatgrid/nix-hive/archive/main.tar.gz
+nix-env -if https://github.com/swdunlop/nix-hive/archive/main.tar.gz
 ```
 
 The build host should be the same system type as the managed instances.  (Meaning, you cannot currently use Nix-Hive
