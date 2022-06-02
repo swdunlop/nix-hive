@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -102,6 +103,10 @@ func (inv *Inventory) push(ctx context.Context, instances []string, paths ...str
 }
 
 func (inv *Inventory) pushNixPaths(ctx context.Context, store string, paths ...string) error {
+	err := inv.realiseNixPaths(ctx, store, paths...)
+	if err == nil {
+		return nil // no reason to copy.
+	}
 	paths = uniqueStrings(paths)
 	args := make([]string, 0, len(paths)+8)
 	args = append(
@@ -121,6 +126,28 @@ func (inv *Inventory) pushNixPaths(ctx context.Context, store string, paths ...s
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	return cmd.Run()
+}
+
+// realiseNixPaths will attempt to realise the specified paths on the remote store prior to copying them if the remote
+// store is ssh or ssh-ng.  (If this works, we do not need to actually do the copy.)
+func (inv *Inventory) realiseNixPaths(ctx context.Context, store string, paths ...string) error {
+	u, err := url.Parse(store)
+	if err != nil {
+		return err
+	}
+	switch u.Scheme {
+	case `ssh`, `ssh-ng`:
+		hostname := u.Hostname()
+		command := make([]string, 0, len(paths)+8)
+		command = append(command, `nix-store`, `--realise`)
+		command = append(command, paths...)
+		inform(ctx, `trying ssh %v %v`, hostname, strings.Join(command, " "))
+
+		// NOTE: We do not support the full plethora of ad-hoc ssh features that might be in this URL.
+		return runCommandOn(ctx, hostname, command)
+	default:
+		return fmt.Errorf(`cannot realise on %q`, store)
+	}
 }
 
 func uniqueStrings(seq []string) []string {
