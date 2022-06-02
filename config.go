@@ -67,7 +67,7 @@ func applyState() error {
 			if !ok {
 				return nil // system no longer exists.
 			}
-			if dont.build && pathExists(terms[1]) {
+			if dont.build {
 				cfg.Result = terms[1]
 			}
 		}
