@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -27,7 +28,20 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	err = inv.build(ctx, systems...)
+	var dont struct {
+		realise bool
+	}
+	for _, step := range strings.Split(no, ",") {
+		switch step {
+		case `realise`:
+			dont.realise = true
+		}
+	}
+	if dont.realise {
+		err = inv.instantiate(ctx, systems...)
+	} else {
+		err = inv.build(ctx, systems...)
+	}
 	if err != nil {
 		return err
 	}
@@ -47,6 +61,60 @@ func (inv *Inventory) build(ctx context.Context, systems ...string) error {
 		}
 	}
 	return nil
+}
+
+// equivalent to build that does not realise generated derivations
+func (inv *Inventory) instantiate(ctx context.Context, systems ...string) error {
+	for _, system := range systems {
+		err := inv.Systems[system].instantiate(ctx, system)
+		if err != nil {
+			return fmt.Errorf(`%w while building %q`, err, system)
+		}
+	}
+	return nil
+}
+
+// instantiate creates a .drv in the local store, but for compatibility with build returns the $out path
+func (cfg *System) instantiate(ctx context.Context, system string) error {
+	if cfg.Result != `` {
+		return nil // already built.
+	}
+	args := make([]string, 0, 64)
+	inform(ctx, `instantiating %q`, system)
+
+	args = append(args, `--include`, `deployment=`+deploymentPath)
+	paths := inv.systemPaths(system)
+	for _, path := range paths {
+		args = append(args, `--include`, path)
+	}
+	args = append(args, `--argstr`, `name`, system)
+	args = append(args, `--expr`, `(import <hive/build.nix>)`)
+	derivationFilename, err := eval(ctx, `nix-instantiate`, args...)
+	if err != nil {
+		return err
+	}
+	derivationJson, err := eval(ctx, `nix`, `show-derivation`, strings.TrimRight(string(derivationFilename), "\n"))
+	if err != nil {
+		return err
+	}
+	resultDerivation := make(map[string]struct {
+		Outputs struct {
+			Out struct {
+				Path string `json:"path"`
+			} `json:"out"`
+		} `json:"outputs"`
+	})
+	if err := json.Unmarshal(derivationJson, &resultDerivation); err != nil {
+		return err
+	}
+	if len(resultDerivation) != 1 {
+		return fmt.Errorf("Result of parsing %v does not have exactly one derivation")
+	}
+	for _, drv := range resultDerivation {
+		cfg.Result = drv.Outputs.Out.Path
+		return err
+	}
+	panic("unreachable")
 }
 
 func (cfg *System) build(ctx context.Context, system string) error {
