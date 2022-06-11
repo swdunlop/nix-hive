@@ -93,7 +93,8 @@ func (cfg *System) instantiate(ctx context.Context, system string) error {
 	if err != nil {
 		return err
 	}
-	derivationJson, err := eval(ctx, `nix`, `show-derivation`, strings.TrimRight(string(derivationFilename), "\n"))
+	cfg.ResultDrv = strings.TrimRight(string(derivationFilename), "\n")
+	derivationJson, err := eval(ctx, `nix`, `show-derivation`, cfg.ResultDrv)
 	if err != nil {
 		return err
 	}
@@ -108,7 +109,7 @@ func (cfg *System) instantiate(ctx context.Context, system string) error {
 		return err
 	}
 	if len(resultDerivation) != 1 {
-		return fmt.Errorf("Result of parsing %v does not have exactly one derivation")
+		return fmt.Errorf("Result of parsing %v does not have exactly one derivation", cfg.ResultDrv)
 	}
 	for _, drv := range resultDerivation {
 		cfg.Result = drv.Outputs.Out.Path
