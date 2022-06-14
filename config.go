@@ -197,6 +197,9 @@ type System struct {
 	// Result identifies the path to the built system.  This is populated by the build method, and not by
 	// <hive/inventory.nix>.
 	Result string `json:"result,omitempty"`
+
+	// ResultDrv identifies the Nix derivation built to generate the Result.
+	ResultDrv string `json:"derivation,omitempty"`
 }
 
 // matchPatterns searches rows for items that match a set of patterns, returning the first item in each row for hit,
