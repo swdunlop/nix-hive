@@ -65,8 +65,27 @@ func applyState(args []string) error {
 			dont.build = true
 		}
 	}
+	retainSystem := func(system string) bool {
+		if dont.build { return true }
+		if targetSystems != nil {
+			_, isTarget := targetSystems[system]
+			if !isTarget { return true }
+		}
+		return false
+	}
 	_, err = processState(data, func(predicate string, terms ...string) error {
 		switch predicate {
+		case `d0`: // derivation, variant 0
+			if len(terms) != 2 {
+				return fmt.Errorf(`expected a system and derivation path, for d0, got %v terms`, len(terms))
+			}
+			cfg, ok := inv.Systems[terms[0]]
+			if !ok {
+				return nil // system no longer exists.
+			}
+			if retainSystem(terms[0]) {
+				cfg.ResultDrv = terms[1]
+			}
 		case `r0`: // result, variant 0.
 			if len(terms) != 2 {
 				return fmt.Errorf(`expected a system and result path, for r0, got %v terms`, len(terms))
@@ -75,14 +94,8 @@ func applyState(args []string) error {
 			if !ok {
 				return nil // system no longer exists.
 			}
-			if dont.build {
+			if retainSystem(terms[0]) {
 				cfg.Result = terms[1] // not rebuilding any systems so use old state
-			} else if targetSystems != nil {
-				// rebuilding only some systems, so reuse old state for all others
-				_, isTarget := targetSystems[terms[0]]
-				if !isTarget {
-					cfg.Result = terms[1]
-				}
 			}
 		}
 		return nil
@@ -108,9 +121,12 @@ func appendSystemResultFacts(state []byte) []byte {
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		result := inv.Systems[name].Result
-		if result != `` {
-			state = appendFact(state, `r0`, name, result)
+		invEntry := inv.Systems[name]
+		if invEntry.Result != `` {
+			state = appendFact(state, `r0`, name, invEntry.Result)
+		}
+		if invEntry.ResultDrv != `` {
+			state = appendFact(state, `d0`, name, invEntry.ResultDrv)
 		}
 	}
 	return state
