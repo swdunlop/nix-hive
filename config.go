@@ -36,10 +36,18 @@ func loadInventory(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return applyState()
+	return applyState(args)
 }
 
-func applyState() error {
+func applyState(args []string) error {
+	var targetSystems map[string]struct{}
+	if len(args) > 0 {
+		targetSystems = make(map[string]struct{}, len(args))
+		for _, system := range args {
+			targetSystems[system]=struct{}{}
+		}
+	}
+
 	data, err := ioutil.ReadFile(statePath)
 	switch {
 	case err == nil: // that's good!
@@ -68,7 +76,13 @@ func applyState() error {
 				return nil // system no longer exists.
 			}
 			if dont.build {
-				cfg.Result = terms[1]
+				cfg.Result = terms[1] // not rebuilding any systems so use old state
+			} else if targetSystems != nil {
+				// rebuilding only some systems, so reuse old state for all others
+				_, isTarget := targetSystems[terms[0]]
+				if !isTarget {
+					cfg.Result = terms[1]
+				}
 			}
 		}
 		return nil
