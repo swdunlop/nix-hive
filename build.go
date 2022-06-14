@@ -142,5 +142,9 @@ func (cfg *System) build(ctx context.Context, system string) error {
 		return err
 	}
 	cfg.Result = result
+	derivationFilename, err := eval(ctx, `nix-store`, `--query`, `--deriver`, result)
+	if err == nil {
+		cfg.ResultDrv = strings.TrimRight(string(derivationFilename), "\n")
+	}
 	return err
 }
