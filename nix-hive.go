@@ -45,7 +45,7 @@ func preRun(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	err = applyState()
+	err = applyState(args)
 	if err != nil {
 		return err
 	}
