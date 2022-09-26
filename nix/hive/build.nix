@@ -6,14 +6,17 @@ let
   deployment = import <deployment>;
   systems = deployment.systems or (throw "systems not specified in deployment");
   system = systems.${name} or (throw "system ${name} could not be found");
-  nixos = import <nixpkgs/nixos>;
-  result = nixos {
-    configuration = if !builtins.hasAttr "configuration" system then
+  nixosEval = import <nixpkgs/nixos/lib/eval-config.nix>;
+  configuration =
+    if !builtins.hasAttr "configuration" system then
       throw "missing system configuration"
     else if !builtins.isFunction system.configuration then
       throw "system configuration should be a function"
     else
       system.configuration;
+  result = nixosEval ({
+    modules = [ configuration ];
     system = system.system or builtins.currentSystem;
-  };
-in result.system
+  } // (if system ? evalConfigArgs then system.evalConfigArgs else { }));
+in
+result.config.system.build.toplevel
