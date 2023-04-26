@@ -13,6 +13,14 @@ import (
 )
 
 func init() {
+	deploymentPath = os.Getenv(DEFAULT_DEPLOYMENT_PATH_ENV)
+	if deploymentPath == "" {
+		deploymentPath = DEFAULT_DEPLOYMENT_PATH
+	}
+	statePath = os.Getenv(DEFAULT_STATE_PATH_ENV)
+	if statePath == "" {
+		statePath = DEFAULT_STATE_PATH
+	}
 	rf := rootCmd.PersistentFlags()
 	rf.StringVarP(
 		&deploymentPath, `config`, `c`, `hive.nix`, `Nix deployment configuration path`)
@@ -132,8 +140,14 @@ func appendSystemResultFacts(state []byte) []byte {
 	return state
 }
 
-var deploymentPath = `./hive.nix`
-var statePath = `.hive.state`
+const DEFAULT_DEPLOYMENT_PATH_ENV = `nix_hive_config`
+const DEFAULT_DEPLOYMENT_PATH = `./hive.nix`
+
+const DEFAULT_STATE_PATH_ENV = `nix_hive_state`
+const DEFAULT_STATE_PATH = `.hive.state`
+
+var deploymentPath string
+var statePath string
 var no = ``
 
 var inv Inventory
