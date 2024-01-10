@@ -12,6 +12,7 @@ import (
 
 func init() {
 	rootCmd.AddCommand(deployCmd)
+	deployCmd.Flags().StringVarP(&deploymentType, `type`, `t`, `switch`, `Flag that should be passed to system activation command`)
 }
 
 var deployCmd = &cobra.Command{
@@ -57,7 +58,7 @@ func (inv *Inventory) deployInstance(ctx context.Context, instance string) error
 	cfg := inv.Instances[instance]
 	path := inv.Systems[cfg.System].Result
 	var deployFlag string
-	switch deployType := os.Getenv("NIX_DEPLOY"); deployType {
+	switch deploymentType {
 	case "boot":
 		deployFlag = "boot"
 	case "test":
@@ -66,7 +67,7 @@ func (inv *Inventory) deployInstance(ctx context.Context, instance string) error
 		deployFlag = "switch"
 	}
 	args := []string{`-F`, filepath.Join(tmp, `ssh_config`), instance, `sudo`, path + `/bin/switch-to-configuration`, deployFlag}
-	opts := os.Getenv("NIX_COPYOPTS") //TODO: DOC this, NIX_SSHOPTS and NIX_DEPLOY
+	opts := os.Getenv("NIX_COPYOPTS") //TODO: DOC this and NIX_SSHOPTS
 	if opts != `` {
 		args = append(args, strings.Split(opts, " ")...)
 	}
