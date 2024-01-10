@@ -133,6 +133,7 @@ func appendSystemResultFacts(state []byte) []byte {
 }
 
 var deploymentPath = `./hive.nix`
+var deploymentType = ``
 var statePath = `.hive.state`
 var no = ``
 
