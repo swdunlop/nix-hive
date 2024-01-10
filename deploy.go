@@ -56,8 +56,17 @@ func (inv *Inventory) deploy(ctx context.Context, instances ...string) error {
 func (inv *Inventory) deployInstance(ctx context.Context, instance string) error {
 	cfg := inv.Instances[instance]
 	path := inv.Systems[cfg.System].Result
-	args := []string{`-F`, filepath.Join(tmp, `ssh_config`), instance, `sudo`, path + `/bin/switch-to-configuration`, `switch`}
-	opts := os.Getenv("NIX_COPYOPTS") //TODO: DOC this and NIX_SSHOPTS
+	var deployFlag string
+	switch deployType := os.Getenv("NIX_DEPLOY"); deployType {
+	case "boot":
+		deployFlag = "boot"
+	case "test":
+		deployFlag = "test"
+	default:
+		deployFlag = "switch"
+	}
+	args := []string{`-F`, filepath.Join(tmp, `ssh_config`), instance, `sudo`, path + `/bin/switch-to-configuration`, deployFlag}
+	opts := os.Getenv("NIX_COPYOPTS") //TODO: DOC this, NIX_SSHOPTS and NIX_DEPLOY
 	if opts != `` {
 		args = append(args, strings.Split(opts, " ")...)
 	}
