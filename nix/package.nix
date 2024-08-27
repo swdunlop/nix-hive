@@ -3,7 +3,7 @@ buildGoModule {
   name = "nix-hive";
 
   src = ./..;
-  vendorSha256 = "17sdj4h84q9d22s2j2qx3xrlfpg206x3wlgmq9xfnmk55bzxiidr";
+  vendorHash = "sha256:17sdj4h84q9d22s2j2qx3xrlfpg206x3wlgmq9xfnmk55bzxiidr";
   nativeBuildInputs = [ makeWrapper ];
 
   postFixup = ''
