@@ -56,6 +56,11 @@ func runBuild(cmd *cobra.Command, args []string) error {
 // build builds systems for a specific target, such as "system" for a NixOS system or "vhd" for a disk image.
 func (inv *Inventory) build(ctx context.Context, systems ...string) error {
 	for _, system := range systems {
+		if excluded, err := anyMatch(system, skipGlobs); err != nil {
+			return err
+		} else if excluded {
+			continue
+		}
 		err := inv.Systems[system].build(ctx, system)
 		if err != nil {
 			return fmt.Errorf(`%w while building %q`, err, system)

@@ -20,6 +20,9 @@ func init() {
 		&statePath, `state`, `s`, `.hive.state`, `Nix-Hive state path`)
 	rf.StringVar(
 		&no, `no`, ``, `List of steps to skip if previously complete, separated by ","`)
+	rf.StringArrayVarP(
+		&skipGlobs, `exclude`, `X`, nil, `Glob expressions matching systems to skip even if listed elsewhere on the command line`)
+
 }
 
 // loadInventory evaluates <hive/config.nix> to establish inventory.
@@ -44,7 +47,7 @@ func applyState(args []string) error {
 	if len(args) > 0 {
 		targetSystems = make(map[string]struct{}, len(args))
 		for _, system := range args {
-			targetSystems[system]=struct{}{}
+			targetSystems[system] = struct{}{}
 		}
 	}
 
@@ -66,10 +69,14 @@ func applyState(args []string) error {
 		}
 	}
 	retainSystem := func(system string) bool {
-		if dont.build { return true }
+		if dont.build {
+			return true
+		}
 		if targetSystems != nil {
 			_, isTarget := targetSystems[system]
-			if !isTarget { return true }
+			if !isTarget {
+				return true
+			}
 		}
 		return false
 	}
@@ -136,6 +143,7 @@ var deploymentPath = `./hive.nix`
 var deploymentType = ``
 var statePath = `.hive.state`
 var no = ``
+var skipGlobs []string = nil
 
 var inv Inventory
 
@@ -183,7 +191,7 @@ func (inv *Inventory) matchSystems(patterns ...string) ([]string, error) {
 	for name := range inv.Systems {
 		rows = append(rows, []string{name})
 	}
-	return matchPatterns(patterns, rows...)
+	return matchPatterns(patterns, skipGlobs, rows...)
 }
 
 // matchInstances identifies unique instances that match the provided patterns.  If no patterns are provided, then
@@ -197,7 +205,7 @@ func (inv *Inventory) matchInstances(patterns ...string) ([]string, error) {
 		copy(row[2:], cfg.Tags)
 		rows = append(rows, row)
 	}
-	return matchPatterns(patterns, rows...)
+	return matchPatterns(patterns, nil, rows...)
 }
 
 func (inv *Inventory) systemPaths(system string) []string {
@@ -233,12 +241,23 @@ type System struct {
 	ResultDrv string `json:"derivation,omitempty"`
 }
 
+func anyMatch(target string, patterns []string) (found bool, err error) {
+	for _, pattern := range patterns {
+		if match, err := path.Match(pattern, target); err != nil {
+			return false, fmt.Errorf(`%v while parsing pattern %q`, err, pattern)
+		} else if match {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // matchPatterns searches rows for items that match a set of patterns, returning the first item in each row for hit,
 // in the order that they occur.  matchPatterns is inherently slow, since it assumes the patterns are globs and uses
 // path.Match -- faster behavior would be achieved by using a regex.
 //
-// IOW, this is O(n*m) and might need remedation for more than a thousand rows or a few patterns.
-func matchPatterns(patterns []string, rows ...[]string) (hits []string, err error) {
+// IOW, this is O(n*m*o) and might need remedation for more than a thousand rows or a few patterns.
+func matchPatterns(patterns []string, negPatterns []string, rows ...[]string) (hits []string, err error) {
 	if len(patterns) == 0 {
 		patterns = []string{`*`}
 	}
@@ -257,17 +276,26 @@ func matchPatterns(patterns []string, rows ...[]string) (hits []string, err erro
 				} else if !match {
 					continue
 				}
-				used = true
 				if _, dup := added[name]; dup {
 					continue
 				}
+				if negMatch, err := anyMatch(name, negPatterns); err != nil {
+					return nil, err
+				} else if negMatch {
+					continue
+				}
+				used = true
 				added[name] = struct{}{}
 				hits = append(hits, name)
 				break
 			}
 		}
 		if !used {
-			return nil, fmt.Errorf(`%q did not match anything`, pattern)
+			if negPatterns != nil {
+				return nil, fmt.Errorf(`%q did not match anything (after exclusion patterns applied)`, pattern)
+			} else {
+				return nil, fmt.Errorf(`%q did not match anything`, pattern)
+			}
 		}
 	}
 	return
