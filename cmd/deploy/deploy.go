@@ -18,12 +18,13 @@ import (
 )
 
 func init() {
-	pflag.StringVarP(&manifestPath, `manifest`, `m`, manifestPath, `path to the JSON manifest file describing instances we can deploy (default: $HIVE_MANIFEST)`)
-	pflag.StringArrayVarP(&excludePatterns, `exclude`, `x`, excludePatterns, `patterns identifying instances we should exclude from deployment (default: exclude nothing)`)
+	pflag.StringVarP(&manifestPath, `manifest`, `m`, manifestPath, `path to the JSON manifest file describing instances we can deploy (default $HIVE_MANIFEST)`)
+	pflag.StringArrayVarP(&excludePatterns, `exclude`, `x`, excludePatterns, `patterns identifying instances we should exclude from deployment (default exclude nothing)`)
 	pflag.CountVarP(&verbosity, `verbose`, `v`, `increase verbosity (can be repeated: -v for info, -vv for debug)`)
 	pflag.BoolVarP(&quiet, `quiet`, `q`, false, `suppress all output except errors`)
 	pflag.BoolVarP(&debugOutput, `debug-output`, `d`, false, `show command output on stderr`)
 	pflag.BoolVar(&noActivate, `no-activate`, false, `copy systems without activating (for pre-staging)`)
+	pflag.StringVar(&activationOperation, `activation-operation`, `switch`, `specify how to activate, see nixos-rebuild(8) for supported operations`)
 }
 
 // manifestPath is the path to manifest.json -- if omitted, we use HIVE_MANIFEST from the OS environment.
@@ -53,6 +54,10 @@ var debugOutput bool
 
 // noActivate skips activation after staging
 var noActivate bool
+
+// activationOperation specifies how to perform the switch -- this is usually "switch", "test" or "boot", but it can
+// be "check" or "dry-activate" to check what will happen without activation.
+var activationOperation = `switch`
 
 func main() {
 	pflag.Usage = printUsage
@@ -269,10 +274,19 @@ func activateSystems(ctx context.Context) error {
 		instance := manifest[name]
 		slog.InfoContext(ctx, "activating system", "instance", name)
 
-		activateCmd := fmt.Sprintf(
-			"sudo nix-env -p /nix/var/nix/profiles/system --set %s && sudo %s/bin/switch-to-configuration switch",
-			instance.SystemPath, instance.SystemPath,
-		)
+		var activateCmd string
+		if activationOperation == "check" || activationOperation == "dry-activate" {
+			// For check and dry-activate, do not change the system profile
+			activateCmd = fmt.Sprintf(
+				"sudo %s/bin/switch-to-configuration %s",
+				instance.SystemPath, activationOperation,
+			)
+		} else {
+			activateCmd = fmt.Sprintf(
+				"sudo nix-env -p /nix/var/nix/profiles/system --set %s && sudo %s/bin/switch-to-configuration %s",
+				instance.SystemPath, instance.SystemPath, activationOperation,
+			)
+		}
 
 		args := buildSSHArgs(instance)
 		args = append(args, name, activateCmd)
