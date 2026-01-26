@@ -25,6 +25,7 @@ func init() {
 	pflag.BoolVarP(&debugOutput, `debug-output`, `d`, false, `show command output on stderr`)
 	pflag.BoolVar(&noActivate, `no-activate`, false, `copy systems without activating (for pre-staging)`)
 	pflag.StringVar(&activationOperation, `activation-operation`, `switch`, `specify how to activate, see nixos-rebuild(8) for supported operations`)
+	pflag.BoolVar(&bootstrap, `bootstrap`, false, `bypass signature checking using nix-store export/import (for initial trust setup)`)
 }
 
 // manifestPath is the path to manifest.json -- if omitted, we use HIVE_MANIFEST from the OS environment.
@@ -58,6 +59,9 @@ var noActivate bool
 // activationOperation specifies how to perform the switch -- this is usually "switch", "test" or "boot", but it can
 // be "check" or "dry-activate" to check what will happen without activation.
 var activationOperation = `switch`
+
+// bootstrap bypasses signature checking using nix-store export/import
+var bootstrap bool
 
 func main() {
 	pflag.Usage = printUsage
@@ -114,6 +118,7 @@ Examples:
   deploy -vv web-1           Deploy with debug logging
   deploy -d web-1            Deploy showing nix/ssh output
   deploy --no-activate       Pre-stage systems without activating
+  deploy --bootstrap web-1   Bootstrap deploy (bypass signature checking)
 `)
 }
 
@@ -126,7 +131,11 @@ func deploy(ctx context.Context) error {
 		loadManifest,
 		selectInstances,
 		excludeInstances,
-		stageSystems,
+	}
+	if bootstrap {
+		steps = append(steps, stageSystemsBootstrap)
+	} else {
+		steps = append(steps, stageSystems)
 	}
 	if !noActivate {
 		steps = append(steps, activateSystems)
@@ -254,6 +263,64 @@ func stageSystems(ctx context.Context) error {
 
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("staging %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// stageSystemsBootstrap uses nix-store export/import to bypass signature checking.
+// This is useful for bootstrapping trust when the remote doesn't yet trust the builder.
+func stageSystemsBootstrap(ctx context.Context) error {
+	for _, name := range targetInstances {
+		instance := manifest[name]
+		slog.InfoContext(ctx, "staging system (bootstrap mode)", "instance", name)
+
+		// Get the closure of the system path
+		closureCmd := exec.CommandContext(ctx, "nix-store", "-qR", instance.SystemPath)
+		closureOut, err := closureCmd.Output()
+		if err != nil {
+			return fmt.Errorf("getting closure for %s: %w", name, err)
+		}
+		paths := strings.Fields(string(closureOut))
+
+		// Build SSH args for the import side
+		// Use sudo to bypass signature checking - nix-store --import as root
+		// writes directly to the store without daemon signature validation
+		sshArgs := buildSSHArgs(instance)
+		sshArgs = append(sshArgs, name, "sudo", "nix-store", "--import")
+
+		// Export paths and pipe to remote import
+		exportCmd := exec.CommandContext(ctx, "nix-store", append([]string{"--export"}, paths...)...)
+		importCmd := exec.CommandContext(ctx, "ssh", sshArgs...)
+
+		pipe, err := exportCmd.StdoutPipe()
+		if err != nil {
+			return fmt.Errorf("creating pipe for %s: %w", name, err)
+		}
+		importCmd.Stdin = pipe
+
+		if debugOutput {
+			exportCmd.Stderr = os.Stderr
+			importCmd.Stdout = os.Stderr
+			importCmd.Stderr = os.Stderr
+		}
+
+		if err := exportCmd.Start(); err != nil {
+			return fmt.Errorf("starting export for %s: %w", name, err)
+		}
+		if err := importCmd.Start(); err != nil {
+			exportCmd.Process.Kill()
+			return fmt.Errorf("starting import for %s: %w", name, err)
+		}
+
+		exportErr := exportCmd.Wait()
+		importErr := importCmd.Wait()
+
+		if exportErr != nil {
+			return fmt.Errorf("exporting %s: %w", name, exportErr)
+		}
+		if importErr != nil {
+			return fmt.Errorf("importing %s: %w", name, importErr)
 		}
 	}
 	return nil
