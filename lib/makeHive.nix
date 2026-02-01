@@ -137,6 +137,83 @@ let
       export HIVE_MANIFEST="${manifestFile}"
       exec ${deployHive system}/bin/deploy-hive "$@"
     '';
+
+    # Sign command: signs all system paths in the manifest with a user-provided key
+    sign = pkgs.writeShellScriptBin "sign" ''
+      set -euo pipefail
+
+      usage() {
+        echo "Usage: sign --key-file <path-to-signing-key> [instance...]"
+        echo ""
+        echo "Signs system paths from the hive manifest with the specified signing key."
+        echo "If no instances are specified, all instances in the manifest are signed."
+        echo ""
+        echo "Options:"
+        echo "  --key-file, -k  Path to the Nix signing secret key file (required)"
+        echo "  --help, -h      Show this help message"
+        exit "''${1:-1}"
+      }
+
+      KEY_FILE=""
+      INSTANCES=()
+
+      while [[ $# -gt 0 ]]; do
+        case $1 in
+          --key-file|-k)
+            KEY_FILE="$2"
+            shift 2
+            ;;
+          --help|-h)
+            usage 0
+            ;;
+          *)
+            INSTANCES+=("$1")
+            shift
+            ;;
+        esac
+      done
+
+      if [[ -z "$KEY_FILE" ]]; then
+        echo "Error: --key-file is required"
+        usage
+      fi
+
+      if [[ ! -f "$KEY_FILE" ]]; then
+        echo "Error: Key file not found: $KEY_FILE"
+        exit 1
+      fi
+
+      # Read manifest and extract system paths
+      MANIFEST="${manifestFile}"
+
+      if [[ ''${#INSTANCES[@]} -eq 0 ]]; then
+        # Sign all instances
+        PATHS=$(${pkgs.jq}/bin/jq -r '.[].systemPath' "$MANIFEST")
+      else
+        # Sign only specified instances
+        PATHS=""
+        for instance in "''${INSTANCES[@]}"; do
+          path=$(${pkgs.jq}/bin/jq -r --arg name "$instance" '.[$name].systemPath // empty' "$MANIFEST")
+          if [[ -z "$path" ]]; then
+            echo "Warning: Instance '$instance' not found in manifest, skipping"
+          else
+            PATHS="$PATHS $path"
+          fi
+        done
+      fi
+
+      if [[ -z "$PATHS" ]]; then
+        echo "No system paths to sign"
+        exit 0
+      fi
+
+      echo "Signing system paths with key: $KEY_FILE"
+      for path in $PATHS; do
+        echo "  Signing: $path"
+        ${pkgs.nix}/bin/nix store sign --recursive --key-file "$KEY_FILE" "$path"
+      done
+      echo "Done"
+    '';
   };
 
   # Packages for all flake-exposed systems (mimics flake packages output structure)
@@ -150,6 +227,7 @@ let
     default = pkgs.mkShell {
       packages = [
         systemPackages.deploy
+        systemPackages.sign
         systemPackages.ssh
         systemPackages.scp
         systemPackages.sftp

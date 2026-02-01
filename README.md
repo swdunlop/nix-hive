@@ -76,6 +76,7 @@ nix-hive provides these packages for managing your hive:
 | Package | Description |
 |---------|-------------|
 | `deploy` | Copy systems to instances and activate them |
+| `sign` | Sign system paths with a Nix signing key |
 | `ssh` | OpenSSH wrapper configured for your hive |
 | `scp` | SCP wrapper configured for your hive |
 | `sftp` | SFTP wrapper configured for your hive |

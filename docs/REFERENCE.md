@@ -196,6 +196,7 @@ Available packages:
 | `scp` | OpenSSH `scp` wrapper with hive SSH config |
 | `sftp` | OpenSSH `sftp` wrapper with hive SSH config |
 | `deploy` | Deployment script (see below) |
+| `sign` | Sign system paths with a Nix signing key (see below) |
 
 ### `devShells`
 
@@ -259,6 +260,63 @@ deploy --no-activation web-server
 3. If activation is enabled:
    - Sets the system profile: `nix-env -p /nix/var/nix/profiles/system --set $systemPath`
    - Runs: `$systemPath/bin/switch-to-configuration switch`
+
+---
+
+## The sign Command
+
+The `sign` package signs system paths in the manifest with a Nix signing key. This is useful when paths were built before the signing key was configured, or when paths were substituted from a cache without your key's signature.
+
+### Usage
+
+```sh
+sign --key-file <path-to-signing-key> [INSTANCE...]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `-k`, `--key-file` | Path to the Nix signing secret key file (required) |
+| `-h`, `--help` | Show help message |
+
+### Examples
+
+Sign all instances:
+```sh
+sign --key-file /etc/nix/signing-key.sec
+```
+
+Sign specific instances:
+```sh
+sign --key-file /etc/nix/signing-key.sec web-server database
+```
+
+### When to Use
+
+Deployment with `nix copy` requires target machines to trust the signatures on store paths. If you see this error:
+
+```
+error: cannot add path '/nix/store/...' because it lacks a signature by a trusted key
+```
+
+Run `sign` to retroactively sign the paths, then retry deployment.
+
+### Preventing Signature Issues
+
+Configure your build machine to sign paths automatically:
+
+```nix
+# On the build machine
+nix.settings.secret-key-files = [ "/etc/nix/signing-key.sec" ];
+```
+
+Restart `nix-daemon` after applying this configuration. Target machines must trust the public key:
+
+```nix
+# On target machines
+nix.settings.trusted-public-keys = [ "keyname:base64pubkey..." ];
+```
 
 ---
 

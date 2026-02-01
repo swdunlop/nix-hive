@@ -492,6 +492,20 @@ secret-key-files = /etc/nix/secret-key
 
 Then restart the nix daemon: `sudo systemctl restart nix-daemon`
 
+#### Signing paths that were built before configuring the key
+
+If you built your systems before setting up the signing key (or substituted them from a cache), the paths won't have your signature. Use the `sign` command to retroactively sign them:
+
+```sh
+# Sign all instances in the manifest
+nix run .#sign -- --key-file /etc/nix/secret-key
+
+# Sign specific instances
+nix run .#sign -- --key-file /etc/nix/secret-key apps storage
+```
+
+Then retry deployment.
+
 #### Configuring targets to trust your builder
 
 Add your builder's public key to your hive's common module so all instances trust it:
