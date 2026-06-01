@@ -25,6 +25,10 @@ func init() {
 	pflag.BoolVarP(&debugOutput, `debug-output`, `d`, false, `show command output on stderr`)
 	pflag.BoolVar(&noActivate, `no-activate`, false, `copy systems without activating (for pre-staging)`)
 	pflag.StringVar(&activationOperation, `activation-operation`, `switch`, `specify how to activate, see nixos-rebuild(8) for supported operations`)
+	pflag.BoolVar(&activationBoot, `boot`, false, `shortcut for --activation-operation=boot (install configuration as default, activate on next boot)`)
+	pflag.BoolVar(&activationTest, `test`, false, `shortcut for --activation-operation=test (activate without updating the boot loader)`)
+	pflag.BoolVar(&activationDryActivate, `dry-activate`, false, `shortcut for --activation-operation=dry-activate (show what would change without activating)`)
+	pflag.BoolVar(&activationCheck, `check`, false, `shortcut for --activation-operation=check (run pre-switch checks without activating)`)
 	pflag.BoolVar(&bootstrap, `bootstrap`, false, `bypass signature checking using nix-store export/import (for initial trust setup)`)
 }
 
@@ -60,6 +64,15 @@ var noActivate bool
 // be "check" or "dry-activate" to check what will happen without activation.
 var activationOperation = `switch`
 
+// activationBoot, activationTest, activationDryActivate, and activationCheck are convenience aliases
+// for the corresponding --activation-operation values.
+var (
+	activationBoot        bool
+	activationTest        bool
+	activationDryActivate bool
+	activationCheck       bool
+)
+
 // bootstrap bypasses signature checking using nix-store export/import
 var bootstrap bool
 
@@ -68,6 +81,10 @@ func main() {
 	pflag.Parse()
 	configureLogging()
 	ctx := context.Background()
+	if err := resolveActivationOperation(); err != nil {
+		slog.ErrorContext(ctx, `invalid options`, `error`, err)
+		os.Exit(2)
+	}
 	targetPatterns = pflag.Args()
 	err := deploy(ctx)
 	if err != nil {
@@ -75,6 +92,44 @@ func main() {
 		_ = os.Stderr.Sync()
 		os.Exit(1)
 	}
+}
+
+// resolveActivationOperation reconciles the alias flags (--boot, --test, --dry-activate, --check)
+// with --activation-operation. At most one alias may be set, and it conflicts with an explicit
+// --activation-operation.
+func resolveActivationOperation() error {
+	aliases := []struct {
+		set bool
+		op  string
+		flag string
+	}{
+		{activationBoot, `boot`, `--boot`},
+		{activationTest, `test`, `--test`},
+		{activationDryActivate, `dry-activate`, `--dry-activate`},
+		{activationCheck, `check`, `--check`},
+	}
+	var picked *struct {
+		set  bool
+		op   string
+		flag string
+	}
+	for i := range aliases {
+		if !aliases[i].set {
+			continue
+		}
+		if picked != nil {
+			return fmt.Errorf("%s conflicts with %s", picked.flag, aliases[i].flag)
+		}
+		picked = &aliases[i]
+	}
+	if picked == nil {
+		return nil
+	}
+	if pflag.CommandLine.Changed(`activation-operation`) {
+		return fmt.Errorf("%s conflicts with --activation-operation", picked.flag)
+	}
+	activationOperation = picked.op
+	return nil
 }
 
 // configureLogging sets up the default slog logger based on verbosity flags.
@@ -118,6 +173,8 @@ Examples:
   deploy -vv web-1           Deploy with debug logging
   deploy -d web-1            Deploy showing nix/ssh output
   deploy --no-activate       Pre-stage systems without activating
+  deploy --boot web-1        Stage and install for next boot (no live switch)
+  deploy --test web-1        Activate without updating the boot loader
   deploy --bootstrap web-1   Bootstrap deploy (bypass signature checking)
 `)
 }
