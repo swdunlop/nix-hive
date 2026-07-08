@@ -107,43 +107,24 @@ func (inv *Inventory) instantiate(ctx context.Context, systems ...string) error 
 			)
 		}
 
-		// generate a map from derivation filenames back to system names
-		systemNameByDrv := make(map[string]string, len(systemList))
-		for n := range derivationFilenames {
-			systemNameByDrv[derivationFilenames[n]] = systemList[n]
-		}
-
-		derivationJson, err := eval(ctx, `nix`, append([]string{`show-derivation`}, derivationFilenames...)...)
-		if err != nil {
-			return err
-		}
-
-		resultDerivation := make(map[string]struct {
-			Outputs struct {
-				Out struct {
-					Path string `json:"path"`
-				} `json:"out"`
-			} `json:"outputs"`
-		})
-
-		if err := json.Unmarshal(derivationJson, &resultDerivation); err != nil {
-			return err
-		}
-
-		if len(resultDerivation) != len(derivationFilenames) {
-			return fmt.Errorf(`asked Nix to parse %d derivations, but received %d results`, len(derivationFilenames), len(resultDerivation))
-		}
-		for drvPath, drvStruct := range resultDerivation {
-			systemName, ok := systemNameByDrv[drvPath]
-			if !ok {
-				return fmt.Errorf(`received information on unexpected derivation %+v`, drvPath)
-			}
+		// We use nix-store to resolve each derivation to its output path instead of `nix show-derivation`,
+		// which was deprecated and changed its JSON structure in later versions of Nix.
+		for n, drvPath := range derivationFilenames {
+			systemName := systemList[n]
 			cfg, ok := inv.Systems[systemName]
 			if !ok {
 				return fmt.Errorf(`cannot find system %+v in inventory`, systemName)
 			}
+			outputPaths, err := eval(ctx, `nix-store`, `--query`, `--outputs`, drvPath)
+			if err != nil {
+				return err
+			}
+			outputs := strings.Split(string(bytes.Trim(outputPaths, "\n")), "\n")
+			if len(outputs) != 1 {
+				return fmt.Errorf(`expected exactly one output for derivation %q, but found %d: %#v`, drvPath, len(outputs), outputs)
+			}
 			cfg.ResultDrv = drvPath
-			cfg.Result = drvStruct.Outputs.Out.Path
+			cfg.Result = outputs[0]
 		}
 	}
 
