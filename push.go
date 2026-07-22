@@ -10,13 +10,20 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/spf13/cobra"
 )
 
 func init() {
 	rootCmd.AddCommand(pushCmd)
+	pushCmd.Flags().IntVarP(&pushConcurrency, `parallel`, `j`, 1, `Maximum number of stores to transfer to concurrently`)
+	deployCmd.Flags().IntVarP(&pushConcurrency, `parallel`, `j`, 1, `Maximum number of stores to transfer to concurrently`)
 }
+
+// pushConcurrency bounds how many stores may be transferred to at once. A value
+// of 1 (the default) pushes to each store serially.
+var pushConcurrency = 1
 
 var pushCmd = &cobra.Command{
 	Use:   `push`,
@@ -93,11 +100,34 @@ func (inv *Inventory) push(ctx context.Context, instances []string, paths ...str
 		}
 	}
 
+	concurrency := pushConcurrency
+	if concurrency < 1 {
+		concurrency = 1
+	}
+
+	// Bound the number of concurrent transfers with a semaphore. Every store is
+	// attempted regardless of whether others fail; failures are reported as they
+	// occur and the returned error is a summary count.
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	var failed int64
+
 	for _, store := range stores {
-		err := inv.pushNixPaths(ctx, store, jobs[store]...)
-		if err != nil {
-			return fmt.Errorf(`%w while pushing to %q`, err, store)
-		}
+		sem <- struct{}{}
+		wg.Add(1)
+		go func(store string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := inv.pushNixPaths(ctx, store, jobs[store]...); err != nil {
+				warn(ctx, `%v while pushing to %q`, err, store)
+				atomic.AddInt64(&failed, 1)
+			}
+		}(store)
+	}
+	wg.Wait()
+
+	if failed > 0 {
+		return fmt.Errorf(`%d of %d pushes failed`, failed, len(stores))
 	}
 	return nil
 }
